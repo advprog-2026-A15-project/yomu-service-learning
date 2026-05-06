@@ -5,7 +5,7 @@ import id.ac.ui.cs.advprog.yomu.learning.internal.model.*;
 import id.ac.ui.cs.advprog.yomu.learning.internal.repository.BacaanRepository;
 import id.ac.ui.cs.advprog.yomu.shared.event.LearningCompletedEvent;
 import id.ac.ui.cs.advprog.yomu.shared.event.QuizCompletedEvent;
-import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -26,12 +26,12 @@ import java.util.stream.Collectors;
 public class BacaanServiceImpl implements BacaanService {
 
     private final BacaanRepository repository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final RabbitTemplate rabbitTemplate;
 
     public BacaanServiceImpl(BacaanRepository repository,
-                             ApplicationEventPublisher eventPublisher) {
+                             RabbitTemplate rabbitTemplate) {
         this.repository = repository;
-        this.eventPublisher = eventPublisher;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     // ─── Bacaan CRUD ─────────────────────────────────────────────────
@@ -152,12 +152,12 @@ public class BacaanServiceImpl implements BacaanService {
 
         repository.saveQuizAttempt(attempt);
 
-        // Publish events ke modul lain (Achievements, Clan)
+        // Publish events ke RabbitMQ
         Instant now = Instant.now();
-        eventPublisher.publishEvent(new LearningCompletedEvent(
+        rabbitTemplate.convertAndSend("yomu.learning.completed", new LearningCompletedEvent(
             request.getUserId(), bacaanId, bacaan.getTitle(), now
         ));
-        eventPublisher.publishEvent(new QuizCompletedEvent(
+        rabbitTemplate.convertAndSend("yomu.quiz.completed", new QuizCompletedEvent(
             request.getUserId(), bacaanId, bacaan.getTitle(), score, now
         ));
 
