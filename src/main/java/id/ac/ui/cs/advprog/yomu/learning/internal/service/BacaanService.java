@@ -20,6 +20,8 @@ public interface BacaanService {
 
     Bacaan getBacaanById(UUID id);
 
+    Bacaan updateBacaan(UUID id, CreateBacaanRequest request);
+
     void deleteBacaan(UUID id);
 
     // ─── Questions (CRUD by Admin) ───────────────────────────────────

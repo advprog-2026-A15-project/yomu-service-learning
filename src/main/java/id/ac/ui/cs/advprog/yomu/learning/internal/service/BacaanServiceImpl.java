@@ -67,6 +67,20 @@ public class BacaanServiceImpl implements BacaanService {
     }
 
     @Override
+    public Bacaan updateBacaan(UUID id, CreateBacaanRequest request) {
+        Bacaan bacaan = repository.findBacaanById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Bacaan tidak ditemukan"));
+
+        bacaan.setTitle(request.getTitle());
+        bacaan.setContent(request.getContent());
+        bacaan.setCategory(request.getCategory());
+        bacaan.setUpdatedAt(LocalDateTime.now());
+
+        return repository.saveBacaan(bacaan);
+    }
+
+    @Override
     public void deleteBacaan(UUID id) {
         if (repository.findBacaanById(id).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Bacaan tidak ditemukan");
