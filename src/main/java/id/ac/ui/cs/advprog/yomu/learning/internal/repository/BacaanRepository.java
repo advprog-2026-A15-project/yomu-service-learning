@@ -87,15 +87,29 @@ public class BacaanRepository {
         if (bacaan.getCreatedAt() == null) bacaan.setCreatedAt(LocalDateTime.now());
         if (bacaan.getUpdatedAt() == null) bacaan.setUpdatedAt(LocalDateTime.now());
 
-        jdbcTemplate.update("""
-            INSERT INTO bacaan (id, title, content, category, created_by_user_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            bacaan.getId(), bacaan.getTitle(), bacaan.getContent(),
-            bacaan.getCategory(), bacaan.getCreatedByUserId(),
-            Timestamp.valueOf(bacaan.getCreatedAt()),
-            Timestamp.valueOf(bacaan.getUpdatedAt())
-        );
+        // Check if bacaan already exists
+        if (findBacaanById(bacaan.getId()).isPresent()) {
+            // Update existing
+            jdbcTemplate.update("""
+                UPDATE bacaan SET title = ?, content = ?, category = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                bacaan.getTitle(), bacaan.getContent(),
+                bacaan.getCategory(), Timestamp.valueOf(bacaan.getUpdatedAt()),
+                bacaan.getId()
+            );
+        } else {
+            // Insert new
+            jdbcTemplate.update("""
+                INSERT INTO bacaan (id, title, content, category, created_by_user_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                bacaan.getId(), bacaan.getTitle(), bacaan.getContent(),
+                bacaan.getCategory(), bacaan.getCreatedByUserId(),
+                Timestamp.valueOf(bacaan.getCreatedAt()),
+                Timestamp.valueOf(bacaan.getUpdatedAt())
+            );
+        }
         return bacaan;
     }
 

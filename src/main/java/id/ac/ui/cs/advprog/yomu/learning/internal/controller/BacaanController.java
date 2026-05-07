@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,6 +29,7 @@ public class BacaanController {
     // ─── Bacaan Endpoints ────────────────────────────────────────────
 
     /** Admin: Buat bacaan baru */
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/bacaan")
     public ResponseEntity<Bacaan> createBacaan(
             @Valid @RequestBody CreateBacaanRequest request,
@@ -49,7 +51,17 @@ public class BacaanController {
         return bacaanService.getBacaanById(id);
     }
 
+    /** Admin: Edit bacaan */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/bacaan/{id}")
+    public ResponseEntity<Bacaan> updateBacaan(
+            @PathVariable UUID id,
+            @Valid @RequestBody CreateBacaanRequest request) {
+        return ResponseEntity.ok(bacaanService.updateBacaan(id, request));
+    }
+
     /** Admin: Hapus bacaan */
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/bacaan/{id}")
     public ResponseEntity<Void> deleteBacaan(@PathVariable UUID id) {
         bacaanService.deleteBacaan(id);
@@ -59,6 +71,7 @@ public class BacaanController {
     // ─── Question Endpoints ──────────────────────────────────────────
 
     /** Admin: Tambah pertanyaan kuis */
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/questions")
     public ResponseEntity<Question> addQuestion(@Valid @RequestBody CreateQuestionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -72,6 +85,7 @@ public class BacaanController {
     }
 
     /** Admin: Hapus pertanyaan */
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/questions/{questionId}")
     public ResponseEntity<Void> deleteQuestion(@PathVariable UUID questionId) {
         bacaanService.deleteQuestion(questionId);
