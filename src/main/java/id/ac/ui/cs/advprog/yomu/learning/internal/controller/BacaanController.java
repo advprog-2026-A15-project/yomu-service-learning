@@ -79,7 +79,7 @@ public class BacaanController {
                 .body(bacaanService.addQuestion(request));
     }
 
-    /** Pelajar: Lihat soal kuis untuk bacaan tertentu */
+    /** Pelajar: Lihat soal kuis untuk bacaan tertentu (tanpa jawaban benar) */
     @GetMapping("/bacaan/{bacaanId}/questions")
     public List<QuizQuestionResponse> getQuestions(@PathVariable UUID bacaanId) {
         return bacaanService.getQuestionsByBacaanId(bacaanId).stream()
@@ -122,6 +122,16 @@ public class BacaanController {
             @RequestParam UUID userId) {
         return ResponseEntity.ok(bacaanService.hasCompletedQuiz(userId, bacaanId));
     }
+
+    // ─── Stats Endpoints (For Liga Integration) ──────────────────────
+
+    /** Liga: Ambil statistik kuis user */
+    @GetMapping("/stats/user/{userId}")
+    public ResponseEntity<QuizStatsResponse> getUserStats(@PathVariable UUID userId) {
+        return ResponseEntity.ok(bacaanService.getUserStats(userId));
+    }
+
+    // ─── Private Helpers ─────────────────────────────────────────────
 
     private void validateQuizOwner(UUID requestUserId, Authentication auth) {
         if (auth == null || auth.getCredentials() == null) {

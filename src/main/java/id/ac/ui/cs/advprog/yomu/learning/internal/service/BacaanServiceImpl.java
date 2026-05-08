@@ -200,4 +200,21 @@ public class BacaanServiceImpl implements BacaanService {
     public boolean hasCompletedQuiz(UUID userId, UUID bacaanId) {
         return repository.hasUserCompletedQuiz(userId, bacaanId);
     }
+
+    @Override
+    public QuizStatsResponse getUserStats(UUID userId) {
+        BacaanRepository.QuizStats stats = repository.getStatsByUserId(userId);
+        List<QuizAttempt> attempts = repository.findAttemptsByUserId(userId);
+        double accuracy = stats.totalAnswered() > 0
+                ? (double) stats.totalCorrect() / stats.totalAnswered() * 100
+                : 0.0;
+        return QuizStatsResponse.builder()
+                .userId(userId)
+                .quizCompleted(stats.quizCompleted())
+                .totalCorrect(stats.totalCorrect())
+                .totalAnswered(stats.totalAnswered())
+                .accuracyPercent(accuracy)
+                .recentAttempts(attempts)
+                .build();
+    }
 }

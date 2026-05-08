@@ -29,7 +29,7 @@ public class BacaanRepository {
     }
 
     @PostConstruct
-    void createTables() {
+    public void createTables() {
         jdbcTemplate.execute("""
             CREATE TABLE IF NOT EXISTS bacaan (
                 id UUID PRIMARY KEY,
@@ -219,5 +219,23 @@ public class BacaanRepository {
             "SELECT * FROM quiz_attempts WHERE user_id = ? ORDER BY completed_at DESC",
             attemptRowMapper, userId
         );
+    }
+
+    public record QuizStats(long quizCompleted, long totalCorrect, long totalAnswered) {}
+
+    public QuizStats getStatsByUserId(UUID userId) {
+        String sql = """
+            SELECT
+                COUNT(*) as quiz_completed,
+                COALESCE(SUM(score), 0) as total_correct,
+                COALESCE(SUM(total_questions), 0) as total_answered
+            FROM quiz_attempts
+            WHERE user_id = ?
+            """;
+        return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> new QuizStats(
+            rs.getLong("quiz_completed"),
+            rs.getLong("total_correct"),
+            rs.getLong("total_answered")
+        ), userId);
     }
 }

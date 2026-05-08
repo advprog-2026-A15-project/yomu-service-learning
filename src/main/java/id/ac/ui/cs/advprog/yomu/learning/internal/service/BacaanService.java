@@ -37,4 +37,8 @@ public interface BacaanService {
     QuizAttempt submitQuiz(UUID bacaanId, SubmitQuizRequest request);
 
     boolean hasCompletedQuiz(UUID userId, UUID bacaanId);
+
+    // ─── Statistics (For Liga Integration) ──────────────────────────
+
+    QuizStatsResponse getUserStats(UUID userId);
 }
