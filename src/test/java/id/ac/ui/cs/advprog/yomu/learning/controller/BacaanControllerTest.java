@@ -3,6 +3,7 @@ package id.ac.ui.cs.advprog.yomu.learning.controller;
 import id.ac.ui.cs.advprog.yomu.learning.internal.controller.BacaanController;
 import id.ac.ui.cs.advprog.yomu.learning.internal.dto.*;
 import id.ac.ui.cs.advprog.yomu.learning.internal.model.*;
+import id.ac.ui.cs.advprog.yomu.learning.internal.dto.QuizQuestionResponse;
 import id.ac.ui.cs.advprog.yomu.learning.internal.service.BacaanService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -202,7 +203,7 @@ class BacaanControllerTest {
 
         when(bacaanService.getQuestionsByBacaanId(bacaanId)).thenReturn(List.of(q));
 
-        List<Question> result = controller.getQuestions(bacaanId);
+        List<QuizQuestionResponse> result = controller.getQuestions(bacaanId);
 
         assertThat(result).hasSize(1);
     }
