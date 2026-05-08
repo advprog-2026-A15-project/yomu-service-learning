@@ -14,6 +14,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -146,10 +148,26 @@ public class BacaanServiceImpl implements BacaanService {
         Map<UUID, Question> questionMap = questions.stream()
                 .collect(Collectors.toMap(Question::getId, Function.identity()));
 
+        if (request.getAnswers().size() != questions.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Jumlah jawaban harus sama dengan jumlah soal");
+        }
+
         int score = 0;
+        Set<UUID> answeredQuestionIds = new HashSet<>();
         for (SubmitQuizRequest.AnswerEntry answer : request.getAnswers()) {
+            if (!answeredQuestionIds.add(answer.getQuestionId())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Jawaban duplikat untuk pertanyaan yang sama");
+            }
+
             Question q = questionMap.get(answer.getQuestionId());
-            if (q != null && q.getCorrectOption().equalsIgnoreCase(answer.getSelectedOption())) {
+            if (q == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Jawaban berisi pertanyaan yang tidak termasuk bacaan ini");
+            }
+
+            if (q.getCorrectOption().equalsIgnoreCase(answer.getSelectedOption())) {
                 score++;
             }
         }

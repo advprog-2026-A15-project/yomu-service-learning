@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -80,8 +81,17 @@ public class BacaanController {
 
     /** Pelajar: Lihat soal kuis untuk bacaan tertentu */
     @GetMapping("/bacaan/{bacaanId}/questions")
-    public List<Question> getQuestions(@PathVariable UUID bacaanId) {
-        return bacaanService.getQuestionsByBacaanId(bacaanId);
+    public List<QuizQuestionResponse> getQuestions(@PathVariable UUID bacaanId) {
+        return bacaanService.getQuestionsByBacaanId(bacaanId).stream()
+                .map(question -> new QuizQuestionResponse(
+                    question.getId(),
+                    question.getQuestionText(),
+                    question.getOptionA(),
+                    question.getOptionB(),
+                    question.getOptionC(),
+                    question.getOptionD()
+                ))
+                .toList();
     }
 
     /** Admin: Hapus pertanyaan */
@@ -98,7 +108,9 @@ public class BacaanController {
     @PostMapping("/bacaan/{bacaanId}/quiz")
     public ResponseEntity<QuizAttempt> submitQuiz(
             @PathVariable UUID bacaanId,
-            @Valid @RequestBody SubmitQuizRequest request) {
+            @Valid @RequestBody SubmitQuizRequest request,
+            Authentication auth) {
+        validateQuizOwner(request.getUserId(), auth);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(bacaanService.submitQuiz(bacaanId, request));
     }
@@ -109,5 +121,25 @@ public class BacaanController {
             @PathVariable UUID bacaanId,
             @RequestParam UUID userId) {
         return ResponseEntity.ok(bacaanService.hasCompletedQuiz(userId, bacaanId));
+    }
+
+    private void validateQuizOwner(UUID requestUserId, Authentication auth) {
+        if (auth == null || auth.getCredentials() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "User tidak terautentikasi");
+        }
+
+        boolean admin = auth.getAuthorities().stream()
+            .map(GrantedAuthority::getAuthority)
+            .anyMatch("ROLE_ADMIN"::equals);
+        if (admin) {
+            return;
+        }
+
+        UUID authenticatedUserId = UUID.fromString(auth.getCredentials().toString());
+        if (!authenticatedUserId.equals(requestUserId)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                HttpStatus.FORBIDDEN, "User tidak dapat submit kuis untuk akun lain");
+        }
     }
 }

@@ -1,6 +1,8 @@
 package id.ac.ui.cs.advprog.yomu.learning.internal.dto;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 import java.util.List;
@@ -19,7 +21,11 @@ public class SubmitQuizRequest {
 
     @Data
     public static class AnswerEntry {
+        @NotNull(message = "Question ID wajib diisi")
         private UUID questionId;
+
+        @NotBlank(message = "Jawaban wajib diisi")
+        @Pattern(regexp = "[A-Da-d]", message = "Pilihan jawaban harus A, B, C, atau D")
         private String selectedOption; // "A", "B", "C", or "D"
     }
 }
