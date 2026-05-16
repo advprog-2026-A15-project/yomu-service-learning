@@ -35,7 +35,7 @@ public class BacaanController {
     public ResponseEntity<Bacaan> createBacaan(
             @Valid @RequestBody CreateBacaanRequest request,
             Authentication auth) {
-        String adminUserId = auth != null ? (String) auth.getCredentials() : "system";
+        String adminUserId = auth != null ? auth.getPrincipal().toString() : "system";
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(bacaanService.createBacaan(request, adminUserId));
     }
@@ -134,7 +134,7 @@ public class BacaanController {
     // ─── Private Helpers ─────────────────────────────────────────────
 
     private void validateQuizOwner(UUID requestUserId, Authentication auth) {
-        if (auth == null || auth.getCredentials() == null) {
+        if (auth == null || auth.getPrincipal() == null) {
             throw new org.springframework.web.server.ResponseStatusException(
                 HttpStatus.UNAUTHORIZED, "User tidak terautentikasi");
         }
@@ -146,7 +146,7 @@ public class BacaanController {
             return;
         }
 
-        UUID authenticatedUserId = UUID.fromString(auth.getCredentials().toString());
+        UUID authenticatedUserId = UUID.fromString(auth.getPrincipal().toString());
         if (!authenticatedUserId.equals(requestUserId)) {
             throw new org.springframework.web.server.ResponseStatusException(
                 HttpStatus.FORBIDDEN, "User tidak dapat submit kuis untuk akun lain");

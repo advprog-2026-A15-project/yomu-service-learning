@@ -104,7 +104,7 @@ class BacaanControllerTest {
         req.setCategory("Sport");
 
         Authentication auth = mock(Authentication.class);
-        when(auth.getCredentials()).thenReturn("admin-id");
+        when(auth.getPrincipal()).thenReturn("admin-id");
         when(bacaanService.createBacaan(req, "admin-id")).thenReturn(sampleBacaan);
 
         ResponseEntity<Bacaan> response = controller.createBacaan(req, auth);
@@ -229,7 +229,7 @@ class BacaanControllerTest {
         req.setAnswers(List.of());
 
         Authentication auth = mock(Authentication.class);
-        when(auth.getCredentials()).thenReturn(userId.toString());
+        when(auth.getPrincipal()).thenReturn(userId.toString());
         when(auth.getAuthorities()).thenReturn(List.of());
 
         QuizAttempt attempt = QuizAttempt.builder()
@@ -250,7 +250,7 @@ class BacaanControllerTest {
         req.setUserId(userId);
 
         Authentication auth = mock(Authentication.class);
-        when(auth.getCredentials()).thenReturn(userId.toString());
+        when(auth.getPrincipal()).thenReturn(userId.toString());
         when(auth.getAuthorities()).thenReturn(List.of());
 
         when(bacaanService.submitQuiz(any(), any()))
