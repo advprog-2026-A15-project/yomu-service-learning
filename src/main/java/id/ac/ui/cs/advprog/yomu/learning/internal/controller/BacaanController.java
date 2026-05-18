@@ -35,7 +35,7 @@ public class BacaanController {
     public ResponseEntity<Bacaan> createBacaan(
             @Valid @RequestBody CreateBacaanRequest request,
             Authentication auth) {
-        String adminUserId = auth != null ? (String) auth.getCredentials() : "system";
+        String adminUserId = auth != null ? auth.getPrincipal().toString() : "system";
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(bacaanService.createBacaan(request, adminUserId));
     }
@@ -79,7 +79,7 @@ public class BacaanController {
                 .body(bacaanService.addQuestion(request));
     }
 
-    /** Pelajar: Lihat soal kuis untuk bacaan tertentu */
+    /** Pelajar: Lihat soal kuis untuk bacaan tertentu (tanpa jawaban benar) */
     @GetMapping("/bacaan/{bacaanId}/questions")
     public List<QuizQuestionResponse> getQuestions(@PathVariable UUID bacaanId) {
         return bacaanService.getQuestionsByBacaanId(bacaanId).stream()
@@ -119,13 +119,22 @@ public class BacaanController {
     @GetMapping("/bacaan/{bacaanId}/quiz/status")
     public ResponseEntity<Boolean> checkQuizStatus(
             @PathVariable UUID bacaanId,
-            @RequestParam(required = false) UUID userId,
-            Authentication auth) {
-        return ResponseEntity.ok(bacaanService.hasCompletedQuiz(resolveTargetUserId(userId, auth), bacaanId));
+            @RequestParam UUID userId) {
+        return ResponseEntity.ok(bacaanService.hasCompletedQuiz(userId, bacaanId));
     }
 
+    // ─── Stats Endpoints (For Liga Integration) ──────────────────────
+
+    /** Liga: Ambil statistik kuis user */
+    @GetMapping("/stats/user/{userId}")
+    public ResponseEntity<QuizStatsResponse> getUserStats(@PathVariable UUID userId) {
+        return ResponseEntity.ok(bacaanService.getUserStats(userId));
+    }
+
+    // ─── Private Helpers ─────────────────────────────────────────────
+
     private void validateQuizOwner(UUID requestUserId, Authentication auth) {
-        if (auth == null || auth.getCredentials() == null) {
+        if (auth == null || auth.getPrincipal() == null) {
             throw new org.springframework.web.server.ResponseStatusException(
                 HttpStatus.UNAUTHORIZED, "User tidak terautentikasi");
         }
@@ -137,7 +146,7 @@ public class BacaanController {
             return;
         }
 
-        UUID authenticatedUserId = UUID.fromString(auth.getCredentials().toString());
+        UUID authenticatedUserId = UUID.fromString(auth.getPrincipal().toString());
         if (!authenticatedUserId.equals(requestUserId)) {
             throw new org.springframework.web.server.ResponseStatusException(
                 HttpStatus.FORBIDDEN, "User tidak dapat submit kuis untuk akun lain");
