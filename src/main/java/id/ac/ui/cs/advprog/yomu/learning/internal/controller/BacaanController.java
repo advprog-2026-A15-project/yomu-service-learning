@@ -119,8 +119,9 @@ public class BacaanController {
     @GetMapping("/bacaan/{bacaanId}/quiz/status")
     public ResponseEntity<Boolean> checkQuizStatus(
             @PathVariable UUID bacaanId,
-            @RequestParam UUID userId) {
-        return ResponseEntity.ok(bacaanService.hasCompletedQuiz(userId, bacaanId));
+            @RequestParam(required = false) UUID userId,
+            Authentication auth) {
+        return ResponseEntity.ok(bacaanService.hasCompletedQuiz(resolveTargetUserId(userId, auth), bacaanId));
     }
 
     private void validateQuizOwner(UUID requestUserId, Authentication auth) {
@@ -141,5 +142,26 @@ public class BacaanController {
             throw new org.springframework.web.server.ResponseStatusException(
                 HttpStatus.FORBIDDEN, "User tidak dapat submit kuis untuk akun lain");
         }
+    }
+
+    private UUID resolveTargetUserId(UUID requestedUserId, Authentication auth) {
+        if (auth == null || auth.getCredentials() == null) {
+            if (requestedUserId != null) {
+                return requestedUserId;
+            }
+            throw new org.springframework.web.server.ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "User tidak terautentikasi");
+        }
+
+        boolean admin = auth.getAuthorities().stream()
+            .map(GrantedAuthority::getAuthority)
+            .anyMatch("ROLE_ADMIN"::equals);
+        UUID authenticatedUserId = UUID.fromString(auth.getCredentials().toString());
+        if (requestedUserId == null || authenticatedUserId.equals(requestedUserId) || admin) {
+            return requestedUserId == null ? authenticatedUserId : requestedUserId;
+        }
+
+        throw new org.springframework.web.server.ResponseStatusException(
+            HttpStatus.FORBIDDEN, "User tidak dapat mengakses status kuis akun lain");
     }
 }
