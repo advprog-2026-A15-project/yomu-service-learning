@@ -154,23 +154,22 @@ public class BacaanController {
     }
 
     private UUID resolveTargetUserId(UUID requestedUserId, Authentication auth) {
-        if (auth == null || auth.getCredentials() == null) {
+        if (auth == null || auth.getPrincipal() == null) {
             if (requestedUserId != null) {
                 return requestedUserId;
             }
             throw new org.springframework.web.server.ResponseStatusException(
-                HttpStatus.UNAUTHORIZED, "User tidak terautentikasi");
+                HttpStatus.UNAUTHORIZED, "User tidak terautentikasi");       
         }
 
         boolean admin = auth.getAuthorities().stream()
             .map(GrantedAuthority::getAuthority)
             .anyMatch("ROLE_ADMIN"::equals);
-        UUID authenticatedUserId = UUID.fromString(auth.getCredentials().toString());
+        UUID authenticatedUserId = UUID.fromString(auth.getPrincipal().toString());
         if (requestedUserId == null || authenticatedUserId.equals(requestedUserId) || admin) {
             return requestedUserId == null ? authenticatedUserId : requestedUserId;
         }
 
-        throw new org.springframework.web.server.ResponseStatusException(
+        throw new org.springframework.web.server.ResponseStatusException(    
             HttpStatus.FORBIDDEN, "User tidak dapat mengakses status kuis akun lain");
-    }
-}
+    }}
