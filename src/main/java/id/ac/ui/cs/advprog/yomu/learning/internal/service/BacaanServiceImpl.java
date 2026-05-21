@@ -190,7 +190,7 @@ public class BacaanServiceImpl implements BacaanService {
             request.getUserId(), bacaanId, bacaan.getTitle(), now
         ));
         rabbitTemplate.convertAndSend("yomu.quiz.completed", new QuizCompletedEvent(
-            request.getUserId(), bacaanId, bacaan.getTitle(), score, now
+            request.getUserId(), bacaanId, bacaan.getTitle(), score, questions.size(), now
         ));
 
         return attempt;
