@@ -50,7 +50,11 @@ public class BacaanServiceImpl implements BacaanService {
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        return repository.saveBacaan(bacaan);
+        Bacaan saved = repository.saveBacaan(bacaan);
+        rabbitTemplate.convertAndSend("yomu.learning.bacaan.updated", new id.ac.ui.cs.advprog.yomu.shared.event.BacaanUpdatedEvent(
+            saved.getId(), saved.getTitle(), "CREATED", Instant.now()
+        ));
+        return saved;
     }
 
     @Override
@@ -79,7 +83,11 @@ public class BacaanServiceImpl implements BacaanService {
         bacaan.setCategory(request.getCategory());
         bacaan.setUpdatedAt(LocalDateTime.now());
 
-        return repository.saveBacaan(bacaan);
+        Bacaan saved = repository.saveBacaan(bacaan);
+        rabbitTemplate.convertAndSend("yomu.learning.bacaan.updated", new id.ac.ui.cs.advprog.yomu.shared.event.BacaanUpdatedEvent(
+            saved.getId(), saved.getTitle(), "UPDATED", Instant.now()
+        ));
+        return saved;
     }
 
     @Override

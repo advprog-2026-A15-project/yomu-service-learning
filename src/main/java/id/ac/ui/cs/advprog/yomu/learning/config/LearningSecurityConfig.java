@@ -33,6 +33,7 @@ public class LearningSecurityConfig {
         http
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(authz -> authz
+                .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/learning/bacaan").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/learning/bacaan/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/learning/bacaan/*/questions").permitAll()
