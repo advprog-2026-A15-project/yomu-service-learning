@@ -5,6 +5,8 @@ import id.ac.ui.cs.advprog.yomu.learning.internal.model.*;
 import id.ac.ui.cs.advprog.yomu.learning.internal.repository.BacaanRepository;
 import id.ac.ui.cs.advprog.yomu.shared.event.LearningCompletedEvent;
 import id.ac.ui.cs.advprog.yomu.shared.event.QuizCompletedEvent;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -17,6 +19,7 @@ import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -29,40 +32,62 @@ public class BacaanServiceImpl implements BacaanService {
 
     private final BacaanRepository repository;
     private final RabbitTemplate rabbitTemplate;
+    private final MeterRegistry meterRegistry;
 
     public BacaanServiceImpl(BacaanRepository repository,
-                             RabbitTemplate rabbitTemplate) {
+                             RabbitTemplate rabbitTemplate,
+                             MeterRegistry meterRegistry) {
         this.repository = repository;
         this.rabbitTemplate = rabbitTemplate;
+        this.meterRegistry = meterRegistry;
     }
 
     // ─── Bacaan CRUD ─────────────────────────────────────────────────
 
     @Override
     public Bacaan createBacaan(CreateBacaanRequest request, String adminUserId) {
-        Bacaan bacaan = Bacaan.builder()
-                .id(UUID.randomUUID())
-                .title(request.getTitle())
-                .content(request.getContent())
-                .category(request.getCategory())
-                .createdByUserId(adminUserId)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            Bacaan bacaan = Bacaan.builder()
+                    .id(UUID.randomUUID())
+                    .title(request.getTitle())
+                    .content(request.getContent())
+                    .category(request.getCategory())
+                    .createdByUserId(adminUserId)
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
+                    .build();
 
-        Bacaan saved = repository.saveBacaan(bacaan);
-        rabbitTemplate.convertAndSend("yomu.learning.bacaan.updated", new id.ac.ui.cs.advprog.yomu.shared.event.BacaanUpdatedEvent(
-            saved.getId(), saved.getTitle(), "CREATED", Instant.now()
-        ));
-        return saved;
+            Bacaan saved = repository.saveBacaan(bacaan);
+            meterRegistry.counter("bacaan.created").increment();
+            rabbitTemplate.convertAndSend("yomu.learning.bacaan.updated", new id.ac.ui.cs.advprog.yomu.shared.event.BacaanUpdatedEvent(
+                saved.getId(), saved.getTitle(), "CREATED", Instant.now()
+            ));
+            return saved;
+        } finally {
+            sample.stop(Timer.builder("bacaan.create.time")
+                .register(meterRegistry));
+        }
     }
 
     @Override
     public List<Bacaan> listBacaan(String category) {
-        if (category != null && !category.isBlank()) {
-            return repository.findBacaanByCategory(category);
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            List<Bacaan> result;
+            if (category != null && !category.isBlank()) {
+                result = repository.findBacaanByCategory(category);
+                meterRegistry.counter("bacaan.list.by_category").increment();
+            } else {
+                result = repository.findAllBacaan();
+                meterRegistry.counter("bacaan.list.all").increment();
+            }
+            meterRegistry.gauge("bacaan.count", result.size());
+            return result;
+        } finally {
+            sample.stop(Timer.builder("bacaan.list.time")
+                .register(meterRegistry));
         }
-        return repository.findAllBacaan();
     }
 
     @Override
@@ -135,73 +160,90 @@ public class BacaanServiceImpl implements BacaanService {
 
     @Override
     public QuizAttempt submitQuiz(UUID bacaanId, SubmitQuizRequest request) {
-        // Cek apakah bacaan ada
-        Bacaan bacaan = repository.findBacaanById(bacaanId)
-                .orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "Bacaan tidak ditemukan"));
+        Timer.Sample sample = Timer.start(meterRegistry);
 
-        // Cek apakah pelajar sudah mengerjakan kuis ini sebelumnya
-        if (repository.hasUserCompletedQuiz(request.getUserId(), bacaanId)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Anda sudah menyelesaikan kuis untuk bacaan ini");
-        }
+        try {
+            // Cek apakah bacaan ada
+            Bacaan bacaan = repository.findBacaanById(bacaanId)
+                    .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Bacaan tidak ditemukan"));
 
-        // Ambil soal dan hitung skor
-        List<Question> questions = repository.findQuestionsByBacaanId(bacaanId);
-        if (questions.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "Belum ada soal untuk bacaan ini");
-        }
+            // Cek apakah pelajar sudah mengerjakan kuis ini sebelumnya
+            if (repository.hasUserCompletedQuiz(request.getUserId(), bacaanId)) {
+                meterRegistry.counter("quiz.submission.duplicate").increment();
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Anda sudah menyelesaikan kuis untuk bacaan ini");
+            }
 
-        Map<UUID, Question> questionMap = questions.stream()
-                .collect(Collectors.toMap(Question::getId, Function.identity()));
-
-        if (request.getAnswers().size() != questions.size()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "Jumlah jawaban harus sama dengan jumlah soal");
-        }
-
-        int score = 0;
-        Set<UUID> answeredQuestionIds = new HashSet<>();
-        for (SubmitQuizRequest.AnswerEntry answer : request.getAnswers()) {
-            if (!answeredQuestionIds.add(answer.getQuestionId())) {
+            // Ambil soal dan hitung skor
+            List<Question> questions = repository.findQuestionsByBacaanId(bacaanId);
+            if (questions.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Jawaban duplikat untuk pertanyaan yang sama");
+                    "Belum ada soal untuk bacaan ini");
             }
 
-            Question q = questionMap.get(answer.getQuestionId());
-            if (q == null) {
+            meterRegistry.gauge("quiz.question.count", questions.size());
+
+            Map<UUID, Question> questionMap = questions.stream()
+                    .collect(Collectors.toMap(Question::getId, Function.identity()));
+
+            if (request.getAnswers().size() != questions.size()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Jawaban berisi pertanyaan yang tidak termasuk bacaan ini");
+                    "Jumlah jawaban harus sama dengan jumlah soal");
             }
 
-            if (q.getCorrectOption().equalsIgnoreCase(answer.getSelectedOption())) {
-                score++;
+            int score = 0;
+            Set<UUID> answeredQuestionIds = new HashSet<>();
+            for (SubmitQuizRequest.AnswerEntry answer : request.getAnswers()) {
+                if (!answeredQuestionIds.add(answer.getQuestionId())) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Jawaban duplikat untuk pertanyaan yang sama");
+                }
+
+                Question q = questionMap.get(answer.getQuestionId());
+                if (q == null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Jawaban berisi pertanyaan yang tidak termasuk bacaan ini");
+                }
+
+                if (q.getCorrectOption().equalsIgnoreCase(answer.getSelectedOption())) {
+                    score++;
+                }
             }
+
+            // Simpan percobaan kuis
+            QuizAttempt attempt = QuizAttempt.builder()
+                    .id(UUID.randomUUID())
+                    .userId(request.getUserId())
+                    .bacaanId(bacaanId)
+                    .score(score)
+                    .totalQuestions(questions.size())
+                    .completedAt(LocalDateTime.now())
+                    .build();
+
+            repository.saveQuizAttempt(attempt);
+
+            // Track score metrics
+            double scorePercentage = (double) score / questions.size() * 100;
+            meterRegistry.counter("quiz.submission.success").increment();
+            meterRegistry.gauge("quiz.score.percentage", scorePercentage);
+
+            // Publish events ke RabbitMQ
+            Instant now = Instant.now();
+            rabbitTemplate.convertAndSend("yomu.learning.completed", new LearningCompletedEvent(
+                request.getUserId(), bacaanId, bacaan.getTitle(), now
+            ));
+            rabbitTemplate.convertAndSend("yomu.quiz.completed", new QuizCompletedEvent(
+                request.getUserId(), bacaanId, bacaan.getTitle(), score, questions.size(), now
+            ));
+
+            return attempt;
+        } finally {
+            sample.stop(Timer.builder("quiz.submission.time")
+                .description("Time taken to submit and grade a quiz")
+                .publishPercentiles(0.5, 0.95, 0.99)
+                .register(meterRegistry));
         }
-
-        // Simpan percobaan kuis
-        QuizAttempt attempt = QuizAttempt.builder()
-                .id(UUID.randomUUID())
-                .userId(request.getUserId())
-                .bacaanId(bacaanId)
-                .score(score)
-                .totalQuestions(questions.size())
-                .completedAt(LocalDateTime.now())
-                .build();
-
-        repository.saveQuizAttempt(attempt);
-
-        // Publish events ke RabbitMQ
-        Instant now = Instant.now();
-        rabbitTemplate.convertAndSend("yomu.learning.completed", new LearningCompletedEvent(
-            request.getUserId(), bacaanId, bacaan.getTitle(), now
-        ));
-        rabbitTemplate.convertAndSend("yomu.quiz.completed", new QuizCompletedEvent(
-            request.getUserId(), bacaanId, bacaan.getTitle(), score, questions.size(), now
-        ));
-
-        return attempt;
     }
 
     @Override
