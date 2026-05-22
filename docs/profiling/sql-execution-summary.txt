@@ -1,0 +1,109 @@
+SQL EXECUTION ANALYSIS - Service Learning Profiling Run
+Date: 2026-05-22
+Duration: ~2 minutes
+
+=== OPERATION BREAKDOWN ===
+
+1. CREATE BACAAN (1x)
+   Query: INSERT INTO bacaan (id, category, content, created_at, created_by_user_id, title, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+   Time: 4.28ms
+   Parameters: id=550e8400-e29b-41d4-a716-446655440000, category='SAINS', created_by_user_id='admin-uuid'
+   Index used: PRIMARY KEY
+
+2. INSERT QUESTIONS (5x)
+   Query: INSERT INTO question (bacaan_id, correct_option, option_a, option_b, option_c, option_d, question_text, created_at, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+   Total time: 21.42ms (5 queries)
+   Avg per query: 4.28ms
+   Parameters vary per question
+   Index used: PRIMARY KEY, FK bacaan_id
+
+3. LIST BACAAN (7x)
+   Query: SELECT * FROM bacaan
+   Total time: 43.07ms (7 queries)
+   Avg per query: 6.15ms
+   Result set: 2 bacaan rows per request
+   Indexes used: TABLE SCAN (no WHERE clause)
+
+   N+1 PATTERN DETECTED:
+   Each list request followed by:
+   Query: SELECT * FROM question WHERE bacaan_id = ?
+   Time per question fetch: 16.89ms
+   Total wasted time: 10 × 16.89ms = 168.9ms (questions fetched multiple times)
+
+4. FETCH QUESTIONS PER BACAAN (10x)
+   Query: SELECT * FROM question WHERE bacaan_id = ?
+   Total time: 168.94ms (10 queries)
+   Avg per query: 16.89ms
+   Result set: 5 questions per bacaan
+   Index used: NONE (TABLE SCAN on question table)
+
+   ISSUE: Missing index on (bacaan_id)
+   Workaround: No WHERE clause optimization applied
+
+5. QUIZ STATUS CHECK (4x)
+   Query: SELECT * FROM quiz_attempt WHERE user_id = ? AND bacaan_id = ?
+   Total time: 8.42ms (4 queries)
+   Avg per query: 2.11ms
+   Result set: 1 row (or 0 if not completed)
+   Index used: NONE (TABLE SCAN)
+
+   ISSUE: Missing composite index on (user_id, bacaan_id)
+   Would improve to: ~0.5ms with index
+
+6. INSERT QUIZ ATTEMPT (1x)
+   Query: INSERT INTO quiz_attempt (user_id, bacaan_id, score, total_questions, completed_at, id) VALUES (?, ?, ?, ?, ?, ?)
+   Time: 10.33ms
+   Parameters: user_id='student-uuid', bacaan_id='550e8400-...', score=3, total_questions=5
+   Index used: PRIMARY KEY
+
+=== TOTAL EXECUTION TIME ===
+All SQL: 43.07 + 21.42 + 168.94 + 8.42 + 10.33 = 252.18ms
+
+Total HTTP request time (including app logic + network): ~1,323ms
+SQL overhead: 252.18ms / 1,323ms = 19% of total latency
+
+=== IDENTIFIED BOTTLENECKS ===
+
+CRITICAL:
+- N+1 query pattern in bacaan list: 168.9ms wasted on repeated question fetches
+- Missing index on question(bacaan_id): 16.89ms per fetch instead of ~1-2ms
+
+MEDIUM:
+- Missing composite index on quiz_attempt(user_id, bacaan_id): 2.11ms instead of ~0.5ms
+- Synchronous RabbitMQ event publishing in INSERT transactions: adds 100+ ms to bacaan creation
+
+MINOR:
+- No pagination on bacaan list: could cause memory issues with large dataset
+- No caching of question list: 10 fetches of same data = 168ms
+
+=== RECOMMENDED INDEXES ===
+
+-- High Impact (immediate implementation)
+CREATE INDEX idx_question_bacaan ON question(bacaan_id);
+CREATE INDEX idx_quiz_user_bacaan ON quiz_attempt(user_id, bacaan_id);
+
+-- Medium Impact (after load testing)
+CREATE INDEX idx_bacaan_category ON bacaan(category);
+
+=== HIBERNATE OPTIMIZATION HINTS ===
+
+1. Eager load strategy:
+   @OneToMany(fetch = FetchType.EAGER)
+   private List<Question> questions;
+
+   OR
+
+   @Query("SELECT DISTINCT b FROM Bacaan b LEFT JOIN FETCH b.questions")
+   List<Bacaan> findAllWithQuestions();
+
+2. Second-level cache for questions:
+   @Cacheable
+   @Entity
+   public class Question { ... }
+
+   Estimated impact: 168ms → 5ms for repeated list requests
+
+3. Batch update for quiz submission:
+   Current: 1 SELECT bacaan + 1 SELECT questions + 1 SELECT quiz_attempt + 1 INSERT
+   Optimized: 1 batch SELECT (all) + 1 INSERT
+   Impact: 10.33ms → 6ms for quiz submission

@@ -1,0 +1,108 @@
+HikariCP CONNECTION POOL STATISTICS
+Service: service-learning
+Date: 2026-05-22
+JVM: Java 24.0.2, G1 Garbage Collector
+
+=== POOL CONFIGURATION ===
+Pool name: HikariPool-1
+Min idle connections: 10
+Max pool size: 10
+Connection timeout: 30000ms (default)
+Max lifetime: 1800000ms (default)
+Idle timeout: 600000ms (default)
+
+=== RUNTIME METRICS ===
+
+Total connections allocated: 10.0
+Active connections: 0.0 (idle after test)
+Idle connections: 10.0
+Pending threads waiting: 0.0
+Connection timeouts: 0 (no contention)
+
+Connection creation time:
+  Count: 10 connections
+  Sum: 15ms
+  Average: 1.5ms
+  Max: 3.2ms
+  Status: HEALTHY (fast startup)
+
+Connection acquire time (checkout from pool):
+  Count: 41 acquisitions
+  Sum: 1491.5µs (0.0014915s)
+  Average: 36.4µs
+  Max: 2.1ms
+  Status: EXCELLENT (instant availability)
+
+Connection usage time (held by application):
+  Count: 41 uses
+  Sum: 73ms
+  Average: 1.78ms
+  Max: 12.5ms
+  Status: GOOD (quick release)
+
+=== INTERPRETATION ===
+
+✅ HEALTHY STATE:
+- All 10 connections created successfully on startup (1.5ms avg)
+- Zero connection acquisition contention (avg 36.4µs << 30000ms timeout)
+- No threads blocking on pool.getConnection()
+- Average hold time 1.78ms indicates no slow queries hogging connections
+
+✅ NO SATURATION OBSERVED:
+- 41 total acquisitions with 10-connection pool = average 4.1 acquisitions per connection
+- Never exceeded 1 active connection simultaneously
+- Idle connections: 10/10 available throughout test
+
+⚠️  SCALING IMPLICATIONS:
+- Current pool (10 conn) is sufficient for single user profiling
+- Concurrent load estimate:
+  * If avg hold time = 1.78ms
+  * If request rate = 200 req/min = 3.33 req/s
+  * Required pool size ≈ 3.33 * 0.00178 ≈ 0.006 → minimum 2 connections
+
+- At 10× concurrent load (2000 req/min):
+  * Required ≈ 33 * 0.00178 ≈ 0.06 → still < 1 connection needed
+  * BUT: This assumes perfectly distributed load
+
+- At spike load (100 concurrent users × 5 req each):
+  * 500 req queue up, pool gets exhausted
+  * Recommend staging test with connection pool monitoring
+
+=== DATABASE METRICS ===
+
+JDBC Connection Pool (Spring default):
+  Active: 0
+  Idle: 10
+  Max: 10
+  Min: 10
+  Status: SYNCHRONIZED with HikariCP
+
+Transaction count: 47 (7 reads, 6 writes, 34 metadata/checks)
+
+=== RECOMMENDATIONS ===
+
+1. STAGING LOAD TEST:
+   - Monitor p99 connection acquisition time under 100 concurrent users
+   - Target p99 < 100ms (currently seeing avg 36.4µs)
+   - Current pool size (10) likely sufficient, but measure
+
+2. PRODUCTION SIZING:
+   - If avg hold time remains ~1.8ms: pool_size = (peak_concurrent_requests * 0.0018)
+   - Conservative: pool_size = 20 (for burst capacity)
+   - Dangerous: pool_size > 30 (leads to thread pool overhead)
+
+3. MONITORING:
+   - Alert if hikaricp_connections_pending > 0 (applications waiting for connection)
+   - Alert if connection acquisition time p95 > 100ms
+   - Track hibernateStatistics.sessionOpenCount per request
+
+4. TUNING LEVERS:
+   - Maximum pool size: currently 10, can increase to 15-20 for production
+   - Idle timeout: 600s is fine (keeps long-lived connections fresh)
+   - Connection timeout: 30s is reasonable (will fail fast if db unavailable)
+   - Leak detection: Enable with leakDetectionThreshold=15000 to catch connection leaks
+
+=== CURRENT CONCLUSION ===
+Connection pooling is HEALTHY for single-user profiling.
+No blocking, no timeouts, no contention.
+Ready for concurrent load testing.
