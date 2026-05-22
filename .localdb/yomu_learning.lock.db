@@ -1,6 +1,6 @@
 #FileLock
-#Fri May 22 19:37:46 WIB 2026
+#Fri May 22 20:25:32 WIB 2026
 hostName=LAPTOP-62KUJ1LA
-id=19e4fa4515dc9f0f438155401b4c9580434ef48ee3f
+id=19e4fdcd15c935d80a09e42238adfafb4a0cb204054
 method=file
-server=192.168.56.1\:57782
+server=192.168.56.1\:56138
