@@ -9,6 +9,7 @@ import id.ac.ui.cs.advprog.yomu.shared.event.QuizCompletedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -265,23 +266,47 @@ class BacaanServiceImplTest {
     }
 
     @Test
-    void submitQuiz_publishesEvents() {
+    void submitQuiz_publishesQuizCompletedEventWithCorrectFields() {
         UUID q1Id = UUID.randomUUID();
+        UUID q2Id = UUID.randomUUID();
+        UUID q3Id = UUID.randomUUID();
         Question q1 = Question.builder().id(q1Id).bacaanId(bacaanId).correctOption("A").build();
+        Question q2 = Question.builder().id(q2Id).bacaanId(bacaanId).correctOption("B").build();
+        Question q3 = Question.builder().id(q3Id).bacaanId(bacaanId).correctOption("C").build();
 
         SubmitQuizRequest req = new SubmitQuizRequest();
         req.setUserId(userId);
-        req.setAnswers(List.of(answerEntry(q1Id, "A")));
+        req.setAnswers(List.of(
+                answerEntry(q1Id, "A"),
+                answerEntry(q2Id, "B"),
+                answerEntry(q3Id, "C")
+        ));
 
         when(repository.findBacaanById(bacaanId)).thenReturn(Optional.of(sampleBacaan));
         when(repository.hasUserCompletedQuiz(userId, bacaanId)).thenReturn(false);
-        when(repository.findQuestionsByBacaanId(bacaanId)).thenReturn(List.of(q1));
+        when(repository.findQuestionsByBacaanId(bacaanId)).thenReturn(List.of(q1, q2, q3));
         when(repository.saveQuizAttempt(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.submitQuiz(bacaanId, req);
 
-        verify(rabbitTemplate).convertAndSend(eq("yomu.learning.completed"), any(LearningCompletedEvent.class));
-        verify(rabbitTemplate).convertAndSend(eq("yomu.quiz.completed"), any(QuizCompletedEvent.class));
+        ArgumentCaptor<LearningCompletedEvent> learningCaptor =
+                ArgumentCaptor.forClass(LearningCompletedEvent.class);
+        verify(rabbitTemplate).convertAndSend(eq("yomu.learning.completed"), learningCaptor.capture());
+        LearningCompletedEvent learningEvent = learningCaptor.getValue();
+        assertThat(learningEvent.userId()).isEqualTo(userId);
+        assertThat(learningEvent.bacaanId()).isEqualTo(bacaanId);
+        assertThat(learningEvent.bacaanSlug()).isEqualTo(sampleBacaan.getTitle());
+        assertThat(learningEvent.occurredAt()).isNotNull();
+
+        ArgumentCaptor<QuizCompletedEvent> quizCaptor = ArgumentCaptor.forClass(QuizCompletedEvent.class);
+        verify(rabbitTemplate).convertAndSend(eq("yomu.quiz.completed"), quizCaptor.capture());
+        QuizCompletedEvent quizEvent = quizCaptor.getValue();
+        assertThat(quizEvent.userId()).isEqualTo(userId);
+        assertThat(quizEvent.quizId()).isEqualTo(bacaanId);
+        assertThat(quizEvent.quizSlug()).isEqualTo(sampleBacaan.getTitle());
+        assertThat(quizEvent.score()).isEqualTo(3);
+        assertThat(quizEvent.totalQuestions()).isEqualTo(3);
+        assertThat(quizEvent.occurredAt()).isNotNull();
     }
 
     @Test
@@ -339,6 +364,76 @@ class BacaanServiceImplTest {
         QuizAttempt result = service.submitQuiz(bacaanId, req);
 
         assertThat(result.getScore()).isZero();
+    }
+
+    @Test
+    void submitQuiz_answerCountMismatch_throws400() {
+        UUID q1Id = UUID.randomUUID();
+        UUID q2Id = UUID.randomUUID();
+        Question q1 = Question.builder().id(q1Id).bacaanId(bacaanId).correctOption("A").build();
+        Question q2 = Question.builder().id(q2Id).bacaanId(bacaanId).correctOption("B").build();
+
+        SubmitQuizRequest req = new SubmitQuizRequest();
+        req.setUserId(userId);
+        req.setAnswers(List.of(answerEntry(q1Id, "A")));
+
+        when(repository.findBacaanById(bacaanId)).thenReturn(Optional.of(sampleBacaan));
+        when(repository.hasUserCompletedQuiz(userId, bacaanId)).thenReturn(false);
+        when(repository.findQuestionsByBacaanId(bacaanId)).thenReturn(List.of(q1, q2));
+
+        assertThatThrownBy(() -> service.submitQuiz(bacaanId, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Jumlah jawaban");
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), any(Object.class));
+    }
+
+    @Test
+    void submitQuiz_duplicateQuestionAnswer_throws400() {
+        UUID q1Id = UUID.randomUUID();
+        UUID q2Id = UUID.randomUUID();
+        Question q1 = Question.builder().id(q1Id).bacaanId(bacaanId).correctOption("A").build();
+        Question q2 = Question.builder().id(q2Id).bacaanId(bacaanId).correctOption("B").build();
+
+        SubmitQuizRequest req = new SubmitQuizRequest();
+        req.setUserId(userId);
+        req.setAnswers(List.of(
+                answerEntry(q1Id, "A"),
+                answerEntry(q1Id, "B")
+        ));
+
+        when(repository.findBacaanById(bacaanId)).thenReturn(Optional.of(sampleBacaan));
+        when(repository.hasUserCompletedQuiz(userId, bacaanId)).thenReturn(false);
+        when(repository.findQuestionsByBacaanId(bacaanId)).thenReturn(List.of(q1, q2));
+
+        assertThatThrownBy(() -> service.submitQuiz(bacaanId, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Jawaban duplikat");
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), any(Object.class));
+    }
+
+    @Test
+    void submitQuiz_unknownQuestionId_throws400() {
+        UUID q1Id = UUID.randomUUID();
+        UUID q2Id = UUID.randomUUID();
+        UUID unknownId = UUID.randomUUID();
+        Question q1 = Question.builder().id(q1Id).bacaanId(bacaanId).correctOption("A").build();
+        Question q2 = Question.builder().id(q2Id).bacaanId(bacaanId).correctOption("B").build();
+
+        SubmitQuizRequest req = new SubmitQuizRequest();
+        req.setUserId(userId);
+        req.setAnswers(List.of(
+                answerEntry(q1Id, "A"),
+                answerEntry(unknownId, "B")
+        ));
+
+        when(repository.findBacaanById(bacaanId)).thenReturn(Optional.of(sampleBacaan));
+        when(repository.hasUserCompletedQuiz(userId, bacaanId)).thenReturn(false);
+        when(repository.findQuestionsByBacaanId(bacaanId)).thenReturn(List.of(q1, q2));
+
+        assertThatThrownBy(() -> service.submitQuiz(bacaanId, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("tidak termasuk bacaan");
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), any(Object.class));
     }
 
     // ─── hasCompletedQuiz ────────────────────────────────────────────
