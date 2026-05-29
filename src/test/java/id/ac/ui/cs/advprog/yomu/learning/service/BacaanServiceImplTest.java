@@ -6,11 +6,11 @@ import id.ac.ui.cs.advprog.yomu.learning.internal.repository.BacaanRepository;
 import id.ac.ui.cs.advprog.yomu.learning.internal.service.BacaanServiceImpl;
 import id.ac.ui.cs.advprog.yomu.shared.event.LearningCompletedEvent;
 import id.ac.ui.cs.advprog.yomu.shared.event.QuizCompletedEvent;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -34,7 +34,6 @@ class BacaanServiceImplTest {
     @Mock
     RabbitTemplate rabbitTemplate;
 
-    @InjectMocks
     BacaanServiceImpl service;
 
     UUID bacaanId;
@@ -54,6 +53,7 @@ class BacaanServiceImplTest {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
+        service = new BacaanServiceImpl(repository, rabbitTemplate, new SimpleMeterRegistry());
     }
 
     // ─── createBacaan ────────────────────────────────────────────────
