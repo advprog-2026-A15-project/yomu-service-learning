@@ -56,22 +56,42 @@ class BacaanControllerTest {
 
     @Test
     void listBacaan_noCategory_returnsAll() {
-        when(bacaanService.listBacaan(null)).thenReturn(List.of(sampleBacaan));
+        when(bacaanService.listBacaan(null, null)).thenReturn(List.of(sampleBacaan));
 
-        List<Bacaan> result = controller.listBacaan(null);
+        List<Bacaan> result = controller.listBacaan(null, null);
 
         assertThat(result).hasSize(1);
-        verify(bacaanService).listBacaan(null);
+        verify(bacaanService).listBacaan(null, null);
     }
 
     @Test
     void listBacaan_withCategory_returnsFiltered() {
-        when(bacaanService.listBacaan("News")).thenReturn(List.of(sampleBacaan));
+        when(bacaanService.listBacaan("News", null)).thenReturn(List.of(sampleBacaan));
 
-        List<Bacaan> result = controller.listBacaan("News");
+        List<Bacaan> result = controller.listBacaan("News", null);
 
         assertThat(result).hasSize(1);
-        verify(bacaanService).listBacaan("News");
+        verify(bacaanService).listBacaan("News", null);
+    }
+
+    @Test
+    void listBacaan_withSearch_returnsFiltered() {
+        when(bacaanService.listBacaan(null, "fiksi")).thenReturn(List.of(sampleBacaan));
+
+        List<Bacaan> result = controller.listBacaan(null, "fiksi");
+
+        assertThat(result).hasSize(1);
+        verify(bacaanService).listBacaan(null, "fiksi");
+    }
+
+    @Test
+    void listBacaan_withCategoryAndSearch_returnsFiltered() {
+        when(bacaanService.listBacaan("News", "test")).thenReturn(List.of(sampleBacaan));
+
+        List<Bacaan> result = controller.listBacaan("News", "test");
+
+        assertThat(result).hasSize(1);
+        verify(bacaanService).listBacaan("News", "test");
     }
 
     // ─── getBacaan ───────────────────────────────────────────────────
@@ -242,6 +262,53 @@ class BacaanControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody().getScore()).isEqualTo(3);
+    }
+
+    @Test
+    void submitQuiz_nullAuth_throws401() {
+        SubmitQuizRequest req = new SubmitQuizRequest();
+        req.setUserId(userId);
+
+        assertThatThrownBy(() -> controller.submitQuiz(bacaanId, req, null))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("terautentikasi");
+    }
+
+    @Test
+    void submitQuiz_adminRole_bypasses_ownerCheck() {
+        SubmitQuizRequest req = new SubmitQuizRequest();
+        UUID otherUserId = UUID.randomUUID();
+        req.setUserId(otherUserId);
+
+        Authentication auth = mock(Authentication.class);
+        when(auth.getPrincipal()).thenReturn(userId.toString());
+        org.springframework.security.core.GrantedAuthority adminAuthority =
+                mock(org.springframework.security.core.GrantedAuthority.class);
+        when(adminAuthority.getAuthority()).thenReturn("ROLE_ADMIN");
+        when(auth.getAuthorities()).thenAnswer(inv -> List.of(adminAuthority));
+
+        QuizAttempt attempt = QuizAttempt.builder()
+                .id(UUID.randomUUID()).userId(otherUserId).bacaanId(bacaanId)
+                .score(2).totalQuestions(3).completedAt(java.time.LocalDateTime.now()).build();
+        when(bacaanService.submitQuiz(bacaanId, req)).thenReturn(attempt);
+
+        ResponseEntity<QuizAttempt> response = controller.submitQuiz(bacaanId, req, auth);
+
+        assertThat(response.getStatusCode()).isEqualTo(org.springframework.http.HttpStatus.CREATED);
+    }
+
+    @Test
+    void submitQuiz_differentUser_throws403() {
+        SubmitQuizRequest req = new SubmitQuizRequest();
+        req.setUserId(UUID.randomUUID());
+
+        Authentication auth = mock(Authentication.class);
+        when(auth.getPrincipal()).thenReturn(userId.toString());
+        when(auth.getAuthorities()).thenReturn(List.of());
+
+        assertThatThrownBy(() -> controller.submitQuiz(bacaanId, req, auth))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("akun lain");
     }
 
     @Test

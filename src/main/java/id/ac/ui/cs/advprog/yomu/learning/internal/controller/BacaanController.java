@@ -42,8 +42,10 @@ public class BacaanController {
 
     /** Pelajar/Admin: Lihat daftar bacaan */
     @GetMapping("/bacaan")
-    public List<Bacaan> listBacaan(@RequestParam(required = false) String category) {
-        return bacaanService.listBacaan(category);
+    public List<Bacaan> listBacaan(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String search) {
+        return bacaanService.listBacaan(category, search);
     }
 
     /** Pelajar: Lihat detail bacaan */
@@ -153,23 +155,4 @@ public class BacaanController {
         }
     }
 
-    private UUID resolveTargetUserId(UUID requestedUserId, Authentication auth) {
-        if (auth == null || auth.getPrincipal() == null) {
-            if (requestedUserId != null) {
-                return requestedUserId;
-            }
-            throw new org.springframework.web.server.ResponseStatusException(
-                HttpStatus.UNAUTHORIZED, "User tidak terautentikasi");       
-        }
-
-        boolean admin = auth.getAuthorities().stream()
-            .map(GrantedAuthority::getAuthority)
-            .anyMatch("ROLE_ADMIN"::equals);
-        UUID authenticatedUserId = UUID.fromString(auth.getPrincipal().toString());
-        if (requestedUserId == null || authenticatedUserId.equals(requestedUserId) || admin) {
-            return requestedUserId == null ? authenticatedUserId : requestedUserId;
-        }
-
-        throw new org.springframework.web.server.ResponseStatusException(    
-            HttpStatus.FORBIDDEN, "User tidak dapat mengakses status kuis akun lain");
-    }}
+}

@@ -71,13 +71,20 @@ public class BacaanServiceImpl implements BacaanService {
     }
 
     @Override
-    public List<Bacaan> listBacaan(String category) {
+    public List<Bacaan> listBacaan(String category, String search) {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
+            boolean hasCategory = category != null && !category.isBlank();
+            boolean hasSearch = search != null && !search.isBlank();
+
             List<Bacaan> result;
-            if (category != null && !category.isBlank()) {
+            if (hasCategory && hasSearch) {
+                result = repository.findBacaanByCategoryAndSearch(category, search);
+            } else if (hasCategory) {
                 result = repository.findBacaanByCategory(category);
                 meterRegistry.counter("bacaan.list.by_category").increment();
+            } else if (hasSearch) {
+                result = repository.findBacaanBySearch(search);
             } else {
                 result = repository.findAllBacaan();
                 meterRegistry.counter("bacaan.list.all").increment();
@@ -85,8 +92,7 @@ public class BacaanServiceImpl implements BacaanService {
             meterRegistry.gauge("bacaan.count", result.size());
             return result;
         } finally {
-            sample.stop(Timer.builder("bacaan.list.time")
-                .register(meterRegistry));
+            sample.stop(Timer.builder("bacaan.list.time").register(meterRegistry));
         }
     }
 

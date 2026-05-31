@@ -82,7 +82,7 @@ class BacaanServiceImplTest {
     void listBacaan_noCategory_returnsAll() {
         when(repository.findAllBacaan()).thenReturn(List.of(sampleBacaan));
 
-        List<Bacaan> result = service.listBacaan(null);
+        List<Bacaan> result = service.listBacaan(null, null);
 
         assertThat(result).hasSize(1);
         verify(repository).findAllBacaan();
@@ -93,7 +93,7 @@ class BacaanServiceImplTest {
     void listBacaan_emptyCategory_returnsAll() {
         when(repository.findAllBacaan()).thenReturn(List.of(sampleBacaan));
 
-        List<Bacaan> result = service.listBacaan("  ");
+        List<Bacaan> result = service.listBacaan("  ", null);
 
         assertThat(result).hasSize(1);
         verify(repository).findAllBacaan();
@@ -103,12 +103,37 @@ class BacaanServiceImplTest {
     void listBacaan_withCategory_returnsFiltered() {
         when(repository.findBacaanByCategory("News")).thenReturn(List.of(sampleBacaan));
 
-        List<Bacaan> result = service.listBacaan("News");
+        List<Bacaan> result = service.listBacaan("News", null);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getCategory()).isEqualTo("News");
         verify(repository).findBacaanByCategory("News");
         verify(repository, never()).findAllBacaan();
+    }
+
+    @Test
+    void listBacaan_withSearchOnly_callsFindBySearch() {
+        when(repository.findBacaanBySearch("fiksi")).thenReturn(List.of(sampleBacaan));
+
+        List<Bacaan> result = service.listBacaan(null, "fiksi");
+
+        assertThat(result).hasSize(1);
+        verify(repository).findBacaanBySearch("fiksi");
+        verify(repository, never()).findAllBacaan();
+        verify(repository, never()).findBacaanByCategory(any());
+    }
+
+    @Test
+    void listBacaan_withCategoryAndSearch_callsFindByCategoryAndSearch() {
+        when(repository.findBacaanByCategoryAndSearch("News", "fiksi")).thenReturn(List.of(sampleBacaan));
+
+        List<Bacaan> result = service.listBacaan("News", "fiksi");
+
+        assertThat(result).hasSize(1);
+        verify(repository).findBacaanByCategoryAndSearch("News", "fiksi");
+        verify(repository, never()).findAllBacaan();
+        verify(repository, never()).findBacaanByCategory(any());
+        verify(repository, never()).findBacaanBySearch(any());
     }
 
     // ─── getBacaanById ───────────────────────────────────────────────

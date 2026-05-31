@@ -127,6 +127,22 @@ public class BacaanRepository {
         );
     }
 
+    public List<Bacaan> findBacaanBySearch(String keyword) {
+    String pattern = "%" + keyword.toLowerCase() + "%";
+    return jdbcTemplate.query(
+        "SELECT * FROM bacaan WHERE LOWER(title) LIKE ? OR LOWER(content) LIKE ? ORDER BY created_at DESC",
+        bacaanRowMapper, pattern, pattern
+        );
+    }
+
+    public List<Bacaan> findBacaanByCategoryAndSearch(String category, String keyword) {
+        String pattern = "%" + keyword.toLowerCase() + "%";
+        return jdbcTemplate.query(
+            "SELECT * FROM bacaan WHERE category = ? AND (LOWER(title) LIKE ? OR LOWER(content) LIKE ?) ORDER BY created_at DESC",
+            bacaanRowMapper, category, pattern, pattern
+        );
+    }
+
     public Optional<Bacaan> findBacaanById(UUID id) {
         return jdbcTemplate.query(
             "SELECT * FROM bacaan WHERE id = ?",

@@ -16,7 +16,7 @@ public interface BacaanService {
 
     Bacaan createBacaan(CreateBacaanRequest request, String adminUserId);
 
-    List<Bacaan> listBacaan(String category);
+    List<Bacaan> listBacaan(String category, String search);
 
     Bacaan getBacaanById(UUID id);
 
