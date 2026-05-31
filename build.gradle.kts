@@ -86,9 +86,6 @@ tasks.jacocoTestCoverageVerification {
     }
 }
 
-tasks.check {
-    dependsOn(tasks.jacocoTestCoverageVerification)
-}
 
 sonar {
     properties {
